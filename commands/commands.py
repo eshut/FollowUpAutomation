@@ -2,7 +2,7 @@ import sys
 import logging
 from typing import Optional
 
-from database import DatabaseManager, PartnerPrinter
+from database import DatabaseManager, PartnerPrinter, PartnerFilter
 from telegram import TelegramService
 
 logger = logging.getLogger(__name__)
@@ -12,12 +12,23 @@ class PartnerListCommand:
     def __init__(self):
         self.db = DatabaseManager()
         self.printer = PartnerPrinter()
+        self.partner_filter = PartnerFilter()
     
     def execute(self):
         try:
             with self.db:
                 partners = self.db.get_all_partners()
-                self.printer.print(partners)
+                partners = self.partner_filter.filter_partners(
+                    partners,
+
+                    days_since_followup=30
+                                                    )
+                x = 0
+                for partner in partners:
+                    if partner.get('telegramLinkPrimaryLinkUrl') != "":
+                        print(partner)
+                        x += 1
+                        print(x)
         except Exception as e:
             logger.error(f"Error listing partners: {e}")
             sys.exit(1)

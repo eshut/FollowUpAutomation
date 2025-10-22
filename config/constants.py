@@ -1,4 +1,4 @@
-PARTNERS_TABLE = 'partners'
+PARTNERS_TABLE = 'workspace_6e5ezrd69vobkyhqrtc3xf307._partner'
 
 DEFAULT_MESSAGE_TEMPLATE = "Hello! This is an automated follow-up message."
 

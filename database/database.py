@@ -1,6 +1,7 @@
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from typing import List, Dict
+from typing import List, Dict, Optional
+from datetime import datetime, timedelta
 import logging
 
 from config import Config
@@ -75,18 +76,65 @@ class DatabaseManager:
             return []
     
     def update_last_contacted(self, partner_id: int) -> bool:
-        query = PartnerQueries.update_last_contacted()
+        query = PartnerQueries.update_last_followup()
         
         try:
             with self.connection.cursor() as cursor:
                 cursor.execute(query, (partner_id,))
                 self.connection.commit()
-                logger.info(f"Updated last_contacted for partner ID {partner_id}")
+                logger.info(f"Updated lastFollowUp for partner ID {partner_id}")
                 return True
         except psycopg2.Error as e:
-            logger.error(f"Error updating last_contacted: {e}")
+            logger.error(f"Error updating lastFollowUp: {e}")
             self.connection.rollback()
             return False
+
+
+class PartnerFilter:
+    @staticmethod
+    def filter_by_followup_date(partners: List[Dict], days_ago: int = 30) -> List[Dict]:
+        cutoff_date = datetime.now().date() - timedelta(days=days_ago)
+        
+        filtered = []
+        for partner in partners:
+            last_followup = partner.get('lastFollowUp')
+            if last_followup and last_followup < cutoff_date:
+                filtered.append(partner)
+        
+        logger.info(f"Filtered {len(filtered)} partners with lastFollowUp > {days_ago} days ago")
+        return filtered
+    
+    @staticmethod
+    def filter_by_status(partners: List[Dict], status: str) -> List[Dict]:
+        filtered = [p for p in partners if p.get('status') == status]
+        logger.info(f"Filtered {len(filtered)} partners with status {status}")
+        return filtered
+    
+    @staticmethod
+    def filter_by_priority(partners: List[Dict], priority: str) -> List[Dict]:
+        filtered = [p for p in partners if p.get('priopity') == priority]
+        logger.info(f"Filtered {len(filtered)} partners with priority {priority}")
+        return filtered
+    
+    @staticmethod
+    def filter_partners(
+        partners: List[Dict],
+        status: Optional[str] = None,
+        priority: Optional[str] = None,
+        days_since_followup: Optional[int] = None
+    ) -> List[Dict]:
+        filtered = partners
+        
+        if status:
+            filtered = PartnerFilter.filter_by_status(filtered, status)
+        
+        if priority:
+            filtered = PartnerFilter.filter_by_priority(filtered, priority)
+        
+        if days_since_followup:
+            filtered = PartnerFilter.filter_by_followup_date(filtered, days_since_followup)
+        
+        return filtered
 
 
 class PartnerPrinter:
@@ -96,20 +144,24 @@ class PartnerPrinter:
             print("No partners found.")
             return
         
-        print("\n" + "="*70)
-        print(f"{'PARTNERS LIST':^70}")
-        print("="*70)
+        print("\n" + "="*100)
+        print(f"{'PARTNERS LIST':^100}")
+        print("="*100)
         
         for partner in partners:
             name = partner.get('name', 'N/A')
-            link = partner.get('link', 'N/A')
-            telegram_tag = partner.get('telegram_tag', '')
+            telegram_link = partner.get('telegramLinkPrimaryLinkUrl', 'N/A')
+            upwork_link = partner.get('upworkLinkPrimaryLinkUrl', 'N/A')
+            status = partner.get('status', 'N/A')
+            priority = partner.get('priopity', 'N/A')
+            last_followup = partner.get('lastFollowUp', 'N/A')
             
-            print(f"\n{name} - {link}")
-            if telegram_tag:
-                print(f"  Telegram: {telegram_tag}")
+            print(f"\n{name} - {upwork_link}")
+            print(f"  Status: {status} | Priority: {priority} | Last Follow-up: {last_followup}")
+            if telegram_link:
+                print(f"  Telegram: {telegram_link}")
         
-        print("\n" + "="*70)
+        print("\n" + "="*100)
         print(f"Total partners: {len(partners)}")
-        print("="*70 + "\n")
+        print("="*100 + "\n")
 
