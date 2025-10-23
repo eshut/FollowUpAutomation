@@ -32,8 +32,25 @@ class TelegramMessenger:
             if not await self.client.is_user_authorized():
                 logger.info("Not authorized. Attempting to sign in...")
                 await self.client.send_code_request(self.phone)
-                logger.info("Code sent to your Telegram app. Please check and enter it.")
-                return False
+                
+                code = input("Enter the code you received in Telegram: ")
+                
+                try:
+                    await self.client.sign_in(self.phone, code)
+                    logger.info("Successfully signed in!")
+                except Exception as e:
+                    if "Two-steps verification" in str(e) or "password" in str(e).lower():
+                        logger.info("2FA is enabled. Password required.")
+                        password = input("Enter your 2FA password: ")
+                        try:
+                            await self.client.sign_in(password=password)
+                            logger.info("Successfully signed in with 2FA!")
+                        except Exception as pwd_error:
+                            logger.error(f"Failed to sign in with password: {pwd_error}")
+                            return False
+                    else:
+                        logger.error(f"Failed to sign in: {e}")
+                        return False
             
             logger.info("Successfully connected to Telegram")
             return True
@@ -47,24 +64,24 @@ class TelegramMessenger:
             await self.client.disconnect()
             logger.info("Disconnected from Telegram")
     
-    async def send_message(self, username: str, message: str) -> bool:
+    async def send_message(self, username, message: str) -> bool:
         if not self.client:
             logger.error("Client not connected")
             return False
         
-        username = username.lstrip('@')
+        username = str(username).lstrip('@')
         
         try:
             entity = await self.client.get_entity(username)
             await self.client.send_message(entity, message)
-            logger.info(f"Message sent to @{username}")
+            logger.info(f"Message sent to {username}")
             return True
             
         except FloodWaitError as e:
             logger.error(f"Flood wait error. Need to wait {e.seconds} seconds")
             return False
         except Exception as e:
-            logger.error(f"Error sending message to @{username}: {e}")
+            logger.error(f"Error sending message to {username}: {e}")
             return False
     
     async def send_message_to_partners(
@@ -107,18 +124,18 @@ class TelegramMessenger:
         )
         return results
     
-    async def check_user_exists(self, username: str) -> bool:
+    async def check_user_exists(self, username) -> bool:
         if not self.client:
             logger.error("Client not connected")
             return False
         
-        username = username.lstrip('@')
+        username = str(username).lstrip('@')
         
         try:
             await self.client.get_entity(username)
             return True
         except Exception as e:
-            logger.error(f"User @{username} not found: {e}")
+            logger.error(f"User {username} not found: {e}")
             return False
 
 
@@ -155,4 +172,29 @@ class TelegramService:
         delay: int = 2
     ) -> Dict[str, int]:
         return asyncio.run(TelegramService.send_messages(partners, message, delay))
+    
+    @staticmethod
+    async def send_single_message_async(user_id, message: str) -> bool:
+        messenger = TelegramMessenger()
+        
+        try:
+            connected = await messenger.connect()
+            if not connected:
+                logger.error("Failed to connect to Telegram")
+                return False
+            
+            success = await messenger.send_message(user_id, message)
+            return success
+            
+        finally:
+            await messenger.disconnect()
+    
+    @staticmethod
+    def send_single_message(user_id, message: str) -> bool:
+        return asyncio.run(TelegramService.send_single_message_async(user_id, message))
+
+
+tg = TelegramService()
+tg.send_single_message("@slicksaber", "1")
+
 
