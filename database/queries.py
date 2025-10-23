@@ -8,7 +8,7 @@ class PartnerQueries:
             SELECT id, name, priopity, 
                    COALESCE("lastFollowUp", "createdAt"::date) as "lastFollowUp",
                    "createdAt",
-                   status, "telegramLinkPrimaryLinkUrl", "upworkLinkPrimaryLinkUrl"
+                   status, "telegramLinkPrimaryLinkUrl", "upworkLinkPrimaryLinkUrl", "linkedinLinkPrimaryLinkUrl", "countryAddressCountry"
             FROM {PARTNERS_TABLE}
             ORDER BY name
         """

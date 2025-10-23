@@ -4,6 +4,8 @@ from typing import Optional
 from commands import PartnerListCommand
 from config import DEFAULT_MESSAGE_TEMPLATE, MINUTE, MONTH
 from database import DatabaseManager, PartnerFilter
+from framework_inject.page_object.profile_page import ProfilePage
+from framework_inject.utils.time_util import wait_time
 from telegram import TelegramService
 
 logging.basicConfig(
@@ -144,14 +146,30 @@ class Auto:
     def __init__(self):
         self.auto = AutoMessenger(min_message_interval=MONTH)
         self.tg = 0
+        self.pp = ProfilePage()
 
     def main(self):
         partners_from_db = PartnerListCommand().execute()
         for partner in partners_from_db:
-            # TELEGRAM:
-            if partner.get("telegramLinkPrimaryLinkUrl") != "":
-                self.process_telegram_entry(partner)
-                self.tg += 1
+            if partner.get("status") not in ["DEAD"]:
+                # TELEGRAM:
+                if partner.get("telegramLinkPrimaryLinkUrl") != "":
+                    self.process_telegram_entry(partner)
+                    self.tg += 1
+                    continue
+
+                if partner.get("linkedinLinkPrimaryLinkUrl") != "":
+                    print(f'FOUND LINKEDIN: {partner.get("name")} | {partner.get("linkedinLinkPrimaryLinkUrl")}')
+                    continue
+
+                # UPWORK
+                if partner.get("upworkLinkPrimaryLinkUrl") != "":
+                    if partner.get("countryAddressCountry") == "Ukraine":
+                        self.process_upwork_entry(partner)
+                        continue
+
+                else:
+                    print(partner.get("name"), partner.get("telegramLinkPrimaryLinkUrl"), partner.get("linkedinLinkPrimaryLinkUrl"), partner.get("upworkLinkPrimaryLinkUrl"))
 
     def process_telegram_entry(self, partner):
         print(partner.get('name'), partner.get("telegramLinkPrimaryLinkUrl"))
@@ -163,6 +181,20 @@ class Auto:
             print(f"SKIP | USER: {partner.get('name')} WAS MESSAGED BEFORE")
             self.auto.update_partner_followup_date(partner_id=partner.get('id'),
                                               set_datetime=result.get('last_msg_time'))
+
+    def process_upwork_entry(self, partner):
+        print(partner.get('name'), partner.get("upworkLinkPrimaryLinkUrl"))
+        try:
+            # self.pp.open_profile_page(partner.get("upworkLinkPrimaryLinkUrl"))
+            self.pp.open_profile_page(partner.get("upworkLinkPrimaryLinkUrl"))
+            self.pp.open_messanger()
+            self.pp.write_and_send_message(DEFAULT_MESSAGE_TEMPLATE)
+            self.pp.confirm_send_message()
+            wait_time(5)
+        except:
+            print(f"FAILED - {partner}")
+            return
+        self.auto.update_partner_followup_date(partner_id=partner.get('id'))
 
 
 if __name__ == '__main__':
