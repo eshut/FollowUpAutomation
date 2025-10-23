@@ -5,7 +5,10 @@ class PartnerQueries:
     @staticmethod
     def get_all_partners():
         return f"""
-            SELECT id, name, priopity, "lastFollowUp", status, "telegramLinkPrimaryLinkUrl", "upworkLinkPrimaryLinkUrl"
+            SELECT id, name, priopity, 
+                   COALESCE("lastFollowUp", "createdAt"::date) as "lastFollowUp",
+                   "createdAt",
+                   status, "telegramLinkPrimaryLinkUrl", "upworkLinkPrimaryLinkUrl"
             FROM {PARTNERS_TABLE}
             ORDER BY name
         """
@@ -13,7 +16,10 @@ class PartnerQueries:
     @staticmethod
     def get_partners_by_tag():
         return f"""
-            SELECT id, name, priopity, "lastFollowUp", status, "telegramLinkPrimaryLinkUrl", "upworkLinkPrimaryLinkUrl"
+            SELECT id, name, priopity,
+                   COALESCE("lastFollowUp", "createdAt"::date) as "lastFollowUp",
+                   "createdAt",
+                   status, "telegramLinkPrimaryLinkUrl", "upworkLinkPrimaryLinkUrl"
             FROM {PARTNERS_TABLE}
             WHERE "telegramLinkPrimaryLinkUrl" = %s
             ORDER BY name
@@ -22,7 +28,10 @@ class PartnerQueries:
     @staticmethod
     def get_partners_with_telegram():
         return f"""
-            SELECT id, name, priopity, "lastFollowUp", status, "telegramLinkPrimaryLinkUrl", "upworkLinkPrimaryLinkUrl"
+            SELECT id, name, priopity,
+                   COALESCE("lastFollowUp", "createdAt"::date) as "lastFollowUp",
+                   "createdAt",
+                   status, "telegramLinkPrimaryLinkUrl", "upworkLinkPrimaryLinkUrl"
             FROM {PARTNERS_TABLE}
             WHERE "telegramLinkPrimaryLinkUrl" IS NOT NULL AND "telegramLinkPrimaryLinkUrl" != ''
             ORDER BY name
@@ -82,5 +91,13 @@ class PartnerQueries:
         return f"""
             UPDATE {PARTNERS_TABLE}
             SET "lastFollowUp" = CURRENT_DATE
+            WHERE id = %s
+        """
+    
+    @staticmethod
+    def update_last_followup_with_date():
+        return f"""
+            UPDATE {PARTNERS_TABLE}
+            SET "lastFollowUp" = %s
             WHERE id = %s
         """

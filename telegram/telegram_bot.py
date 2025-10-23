@@ -1,8 +1,10 @@
 from telethon import TelegramClient
 from telethon.errors import FloodWaitError
 from typing import Optional, List, Dict
+from datetime import datetime, timezone
 import logging
 import asyncio
+import re
 
 from config import Config, DEFAULT_MESSAGE_TEMPLATE
 
@@ -18,6 +20,27 @@ class TelegramMessenger:
         self.phone = config.phone
         self.session_name = config.session_name
         self.client = None
+    
+    @staticmethod
+    def parse_telegram_identifier(identifier):
+        identifier = str(identifier).strip()
+        
+        if identifier.startswith('https://web.telegram.org/'):
+            match = re.search(r'#(-?\d+)', identifier)
+            if match:
+                return int(match.group(1))
+        
+        if identifier.startswith('https://t.me/') or identifier.startswith('t.me/'):
+            identifier = identifier.replace('https://t.me/', '')
+            identifier = identifier.replace('t.me/', '')
+            identifier = identifier.split('?')[0]
+            identifier = identifier.lstrip('@')
+            return identifier
+        
+        if identifier.startswith('-') or identifier.isdigit():
+            return int(identifier)
+        
+        return identifier.lstrip('@')
     
     async def connect(self) -> bool:
         try:
@@ -69,19 +92,19 @@ class TelegramMessenger:
             logger.error("Client not connected")
             return False
         
-        username = str(username).lstrip('@')
+        identifier = self.parse_telegram_identifier(username)
         
         try:
-            entity = await self.client.get_entity(username)
+            entity = await self.client.get_entity(identifier)
             await self.client.send_message(entity, message)
-            logger.info(f"Message sent to {username}")
+            logger.info(f"Message sent to {identifier}")
             return True
             
         except FloodWaitError as e:
             logger.error(f"Flood wait error. Need to wait {e.seconds} seconds")
             return False
         except Exception as e:
-            logger.error(f"Error sending message to {username}: {e}")
+            logger.error(f"Error sending message to {identifier}: {e}")
             return False
     
     async def send_message_to_partners(
@@ -129,14 +152,60 @@ class TelegramMessenger:
             logger.error("Client not connected")
             return False
         
-        username = str(username).lstrip('@')
+        identifier = self.parse_telegram_identifier(username)
         
         try:
-            await self.client.get_entity(username)
+            await self.client.get_entity(identifier)
             return True
         except Exception as e:
-            logger.error(f"User {username} not found: {e}")
+            logger.error(f"User {identifier} not found: {e}")
             return False
+    
+    async def get_chat_messages(self, username, limit: int = 10) -> List[Dict]:
+        if not self.client:
+            logger.error("Client not connected")
+            return []
+        
+        identifier = self.parse_telegram_identifier(username)
+        
+        try:
+            entity = await self.client.get_entity(identifier)
+            messages = await self.client.get_messages(entity, limit=limit)
+            
+            result = []
+            for msg in messages:
+                result.append({
+                    'id': msg.id,
+                    'text': msg.text,
+                    'date': msg.date,
+                    'out': msg.out,
+                    'from_id': msg.from_id
+                })
+            
+            return result
+        except Exception as e:
+            logger.error(f"Error getting messages from {identifier}: {e}")
+            return []
+    
+    async def get_last_outgoing_message_time(self, username):
+        if not self.client:
+            logger.error("Client not connected")
+            return None
+        
+        identifier = self.parse_telegram_identifier(username)
+        
+        try:
+            entity = await self.client.get_entity(identifier)
+            messages = await self.client.get_messages(entity, limit=50)
+            
+            for msg in messages:
+                if msg.out:
+                    return msg.date
+            
+            return None
+        except Exception as e:
+            logger.error(f"Error getting last message time from {identifier}: {e}")
+            return None
 
 
 class TelegramService:
@@ -192,9 +261,74 @@ class TelegramService:
     @staticmethod
     def send_single_message(user_id, message: str) -> bool:
         return asyncio.run(TelegramService.send_single_message_async(user_id, message))
-
-
-tg = TelegramService()
-tg.send_single_message("@slicksaber", "1")
+    
+    @staticmethod
+    async def get_chat_messages_async(user_id, limit: int = 10) -> List[Dict]:
+        messenger = TelegramMessenger()
+        
+        try:
+            connected = await messenger.connect()
+            if not connected:
+                logger.error("Failed to connect to Telegram")
+                return []
+            
+            messages = await messenger.get_chat_messages(user_id, limit)
+            return messages
+            
+        finally:
+            await messenger.disconnect()
+    
+    @staticmethod
+    def get_chat_messages(user_id, limit: int = 10) -> List[Dict]:
+        return asyncio.run(TelegramService.get_chat_messages_async(user_id, limit))
+    
+    @staticmethod
+    async def send_message_with_time_check_async(
+        user_id,
+        message: str,
+        min_seconds: int = 60
+    ) -> Dict[str, any]:
+        messenger = TelegramMessenger()
+        
+        try:
+            connected = await messenger.connect()
+            if not connected:
+                logger.error("Failed to connect to Telegram")
+                return {'sent': False, 'reason': 'connection_failed'}
+            
+            last_msg_time = await messenger.get_last_outgoing_message_time(user_id)
+            
+            if last_msg_time:
+                now = datetime.now(timezone.utc)
+                time_diff = (now - last_msg_time).total_seconds()
+                
+                if time_diff < min_seconds:
+                    logger.info(f"Skipping message to {user_id}. Last message sent {time_diff:.0f} seconds ago")
+                    return {
+                        'sent': False,
+                        'reason': 'too_soon',
+                        'seconds_since_last': time_diff,
+                        'min_required': min_seconds,
+                        'last_msg_time': last_msg_time
+                    }
+            
+            success = await messenger.send_message(user_id, message)
+            
+            return {
+                'sent': success,
+                'reason': 'sent' if success else 'send_failed',
+                'last_msg_time': datetime.now(timezone.utc) if success else None
+            }
+            
+        finally:
+            await messenger.disconnect()
+    
+    @staticmethod
+    def send_message_with_time_check(
+        user_id,
+        message: str,
+        min_seconds: int = 60
+    ) -> Dict[str, any]:
+        return asyncio.run(TelegramService.send_message_with_time_check_async(user_id, message, min_seconds))
 
 

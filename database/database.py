@@ -75,14 +75,19 @@ class DatabaseManager:
             logger.error(f"Error fetching partners with telegram: {e}")
             return []
     
-    def update_last_contacted(self, partner_id: int) -> bool:
-        query = PartnerQueries.update_last_followup()
+    def update_last_contacted(self, partner_id: int, set_date=None) -> bool:
+        if set_date:
+            query = PartnerQueries.update_last_followup_with_date()
+            params = (set_date, partner_id)
+        else:
+            query = PartnerQueries.update_last_followup()
+            params = (partner_id,)
         
         try:
             with self.connection.cursor() as cursor:
-                cursor.execute(query, (partner_id,))
+                cursor.execute(query, params)
                 self.connection.commit()
-                logger.info(f"Updated lastFollowUp for partner ID {partner_id}")
+                logger.info(f"Updated lastFollowUp for partner ID {partner_id} to {set_date or 'current date'}")
                 return True
         except psycopg2.Error as e:
             logger.error(f"Error updating lastFollowUp: {e}")
@@ -92,11 +97,23 @@ class DatabaseManager:
 
 class PartnerFilter:
     @staticmethod
+    def normalize_followup_date(partner: Dict) -> Dict:
+        if not partner.get('lastFollowUp') and partner.get('createdAt'):
+            if isinstance(partner['createdAt'], str):
+                from datetime import datetime as dt
+                partner['lastFollowUp'] = dt.fromisoformat(partner['createdAt']).date()
+            else:
+                partner['lastFollowUp'] = partner['createdAt']
+            logger.info(f"Using createdAt as lastFollowUp for {partner.get('name')}")
+        return partner
+    
+    @staticmethod
     def filter_by_followup_date(partners: List[Dict], days_ago: int = 30) -> List[Dict]:
         cutoff_date = datetime.now().date() - timedelta(days=days_ago)
         
         filtered = []
         for partner in partners:
+            partner = PartnerFilter.normalize_followup_date(partner)
             last_followup = partner.get('lastFollowUp')
             if last_followup and last_followup < cutoff_date:
                 filtered.append(partner)

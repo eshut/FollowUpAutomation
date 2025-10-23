@@ -20,15 +20,10 @@ class PartnerListCommand:
                 partners = self.db.get_all_partners()
                 partners = self.partner_filter.filter_partners(
                     partners,
-
                     days_since_followup=30
                                                     )
-                x = 0
-                for partner in partners:
-                    if partner.get('telegramLinkPrimaryLinkUrl') != "":
-                        print(partner)
-                        x += 1
-                        print(x)
+                print(len(partners))
+            return partners
         except Exception as e:
             logger.error(f"Error listing partners: {e}")
             sys.exit(1)
