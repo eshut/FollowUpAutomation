@@ -188,8 +188,10 @@ class Auto:
             # self.pp.open_profile_page(partner.get("upworkLinkPrimaryLinkUrl"))
             self.pp.open_profile_page(partner.get("upworkLinkPrimaryLinkUrl"))
             self.pp.open_messanger()
-            self.pp.write_and_send_message(DEFAULT_MESSAGE_TEMPLATE)
-            self.pp.confirm_send_message()
+            wait_time(5)
+            # self.pp.write_and_send_message(DEFAULT_MESSAGE_TEMPLATE)
+            # self.pp.confirm_send_message()
+            input("Confirm message...")
             wait_time(5)
         except:
             print(f"FAILED - {partner}")

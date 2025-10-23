@@ -27,7 +27,7 @@ class ProfilePage(BasePage):
         self.wait_for_element(self.SELECTORS["DIALOG_IFRAME"], time=SECOND * 15)
         iframe = self.get_iframe(self.SELECTORS["DIALOG_IFRAME"])
         self.wait_for_element(self.SELECTORS["PLACEHOLDER_TEXT"], frame=iframe)
-        self.click_and_fill_text(self.SELECTORS["PLACEHOLDER_TEXT"], message, frame=iframe)
+        self.click_and_fill_text(self.SELECTORS["PLACEHOLDER_TEXT"], frame=iframe, text=message)
 
     def confirm_send_message(self):
         self.click_enter()
